@@ -10,7 +10,6 @@ sdkconfig.bak
 
 .vscode/
 
-# Eclipse
 *.cproject
 *.project
 .settings/
