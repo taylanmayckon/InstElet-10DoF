@@ -1,0 +1,7 @@
+[wokwi]
+version = 1
+firmware = 'build/InstElet-10DoF.bin'
+elf = 'build/InstElet-10DoF.elf'
+
+[simulation]
+speed = 10.0  
