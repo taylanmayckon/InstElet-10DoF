@@ -13,8 +13,6 @@
 
 #define MPU6050_I2C_ADDRESS 0x68
 
-static const char *TAG_SensorsI2C = "vTaskSensorsI2C";
-
 // Estruturas para informação dos sensores
 typedef struct {
     float x;
@@ -67,7 +65,7 @@ void vTaskSensorsI2C(void *arg) {
 
     i2c_master_bus_handle_t bus_handle;
     ESP_ERROR_CHECK(i2c_new_master_bus(&bus_config, &bus_handle));
-    ESP_LOGI(TAG_SensorsI2C, "Barramento I2C master criado com sucesso");
+    ESP_LOGI(pcTaskGetName(NULL), "Barramento I2C master criado com sucesso");
 
 
     // Adicionando MPU6050 ao barramento 
@@ -81,7 +79,7 @@ void vTaskSensorsI2C(void *arg) {
 
     // Configurando MPU6050
     mpu6050_reset(mpu6050_handle);
-    ESP_LOGI(TAG_SensorsI2C, "MPU6050 inicializado");
+    ESP_LOGI(pcTaskGetName(NULL), "MPU6050 inicializado");
     mpu6050_raw_data_t raw_data;
     mpu6050_data_t processed_data;
     mpu6050_filtered_t filtered_data;
@@ -104,10 +102,12 @@ void vTaskSensorsI2C(void *arg) {
             sensor_data.mpu6050.accel = accel;
             sensor_data.mpu6050.gyro = gyro;
             sensor_data.mpu6050.temperature = processed_data.temp;
+            sensor_data.orientation.pitch = processed_data.pitch;
+            sensor_data.orientation.roll = processed_data.roll;
             // Debug 
-            mpu6050_debug_data(processed_data, filtered_data);
+            // mpu6050_debug_data(processed_data, filtered_data);
         } else {
-            ESP_LOGW(TAG_SensorsI2C, "Falha ao ler MPU6050");
+            ESP_LOGW(pcTaskGetName(NULL), "Falha ao ler MPU6050");
         }
 
 
@@ -118,10 +118,32 @@ void vTaskSensorsI2C(void *arg) {
     }
 }
 
+
+void vTaskWiFi(void *arg){
+    SensorData_t received_data;
+
+    while(1){
+        // Verificando se tem dados a serem coletados da fila
+        if(xQueueReceive(xQueueSensorsData, &received_data, portMAX_DELAY) == pdTRUE){
+            // Processamento desses dados para o wi-fi e envio
+            // ESP_LOGI(pcTaskGetName(NULL), "Dado da fila consumido");
+            printf("\n\n%s: DADOS RECEBIDOS", pcTaskGetName(NULL));
+            printf("\n[ORIENTACAO (graus)] Pitch: %.2f | Roll: %.2f | Yaw: %.2f | Altitude: %.2f", received_data.orientation.pitch, received_data.orientation.roll, 
+                                                            received_data.orientation.yaw, received_data.orientation.altitude);
+            printf("\n[ACELERACAO (m/s2) X: %.2f | Y: %.2f | Z: %.2f", received_data.mpu6050.accel.x, received_data.mpu6050.accel.y, received_data.mpu6050.accel.z);
+            printf("\n[GIROSCOPIO (dps)] X: %.2f | Y: %.2f | Z: %.2f", received_data.mpu6050.gyro.x, received_data.mpu6050.gyro.y, received_data.mpu6050.gyro.z);
+            printf("\n[MAGNETOMETRO (graus)] X: %.2f | Y: %.2f | Z: %.2f", received_data.magnetometer.x, received_data.magnetometer.y, received_data.magnetometer.z);
+            printf("\n[BMP180] Temperatura (°C): %.2f | Pressao (kPa): %.2f\n", received_data.bmp180.temperature, received_data.bmp180.pressure);
+        }
+    }
+}
+
+
 void app_main(void) {
     // Criando filas
     xQueueSensorsData = xQueueCreate(10, sizeof(SensorData_t));
 
     // Criando tasks
     xTaskCreate(vTaskSensorsI2C, "vTaskSensorsI2C", 4096, NULL, 5, NULL);
+    xTaskCreate(vTaskWiFi, "vTaskWiFi", 4096, NULL, 5, NULL);
 }
