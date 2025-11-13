@@ -33,6 +33,15 @@ void mpu6050_reset(i2c_master_dev_handle_t mpu6050_handle){
     }
     vTaskDelay(pdMS_TO_TICKS(10));  // Espera estabilizar
 
+    // Colocando no modo Bypass para detectar o HMC5883L
+    buf[0] = 0x37;
+    buf[1] = 0x02;
+    ret = i2c_master_transmit(mpu6050_handle, buf, 2, -1);
+    if (ret != ESP_OK) {
+        ESP_LOGE("MPU6050", "Falha ao configurar modo bypass: %s", esp_err_to_name(ret));
+        return;
+    }
+
     ESP_LOGI("MPU6050", "MPU6050 resetado e inicializado com sucesso");
 }
 
