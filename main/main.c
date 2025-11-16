@@ -94,7 +94,6 @@ void vTaskSensorsI2C(void *arg) {
         if (ret == ESP_OK) {
             // Processa dados e aplica filtro de Kalmann
             mpu6050_proccess_data(raw_data, &processed_data);
-            mpu6050_kalmann_filter(processed_data, &filtered_data);
 
             // Alocando os valores na struct da fila
             axis_t accel = {processed_data.accel_x, processed_data.accel_y, processed_data.accel_z};
@@ -102,13 +101,17 @@ void vTaskSensorsI2C(void *arg) {
             sensor_data.mpu6050.accel = accel;
             sensor_data.mpu6050.gyro = gyro;
             sensor_data.mpu6050.temperature = processed_data.temp;
-            sensor_data.orientation.pitch = processed_data.pitch;
-            sensor_data.orientation.roll = processed_data.roll;
             // Debug 
             // mpu6050_debug_data(processed_data, filtered_data);
         } else {
             ESP_LOGW(pcTaskGetName(NULL), "Falha ao ler MPU6050");
         }
+
+
+        esp_err_t ret_hmc = hmc5883l_read_data(hmc5883l_handle, &sensor_data.magnetometer);
+        if (ret_hmc != ESP_OK)
+            ESP_LOGW(pcTaskGetName(NULL), "Falha ao ler HMC5883L: %s", esp_err_to_name(ret_hmc));
+            
 
 
         // Enviando os dados para a fila

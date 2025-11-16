@@ -11,7 +11,7 @@ static const char *TAG = "MPU6050";
 
 // Função para resetar e inicializar o MPU6050
 void mpu6050_reset(i2c_master_dev_handle_t mpu6050_handle){
-        esp_err_t ret;
+    esp_err_t ret;
     uint8_t buf[2];
 
     // Resetando (registrador 0x6B, valor 0x80)
