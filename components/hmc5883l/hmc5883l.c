@@ -1,7 +1,10 @@
 #include "hmc5883l.h"
 
 #include "driver/i2c_master.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "esp_err.h"
+#include "esp_log.h"
 
 
 void hmc5883l_init(i2c_master_dev_handle_t hmc5883l_handle){
@@ -37,7 +40,7 @@ void hmc5883l_init(i2c_master_dev_handle_t hmc5883l_handle){
 }
 
 
-esp_err_t hmc5883l_read_data(i2c_master_dev_handle_t hmc5883l_handle, axis_t *data){
+esp_err_t hmc5883l_read_data(i2c_master_dev_handle_t hmc5883l_handle, magnetometer_data_t *data){
     esp_err_t ret;
     
     uint8_t raw_data[6]; // O sensor retorna 6 bytes: X_MSB, X_LSB, Z_MSB, Z_LSB, Y_MSB, Y_LSB

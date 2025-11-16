@@ -25,11 +25,10 @@ typedef struct {
     float x;
     float y;
     float z;
-} axis_t;
+} magnetometer_data_t;
 
 
 void hmc5883l_init(i2c_master_dev_handle_t hmc5883l_handle);
-esp_err_t hmc5883l_read_raw(i2c_master_dev_handle_t hmc5883l_handle, hmc5883l_raw_t *data);
-void hmc5883l_process_data(axis_t raw_data, axis_t *final_data);
+esp_err_t hmc5883l_read_data(i2c_master_dev_handle_t hmc5883l_handle, magnetometer_data_t *data);
 
 #endif

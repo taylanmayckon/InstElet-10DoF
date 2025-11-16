@@ -5,6 +5,7 @@
 #include "driver/i2c_master.h"
 #include "esp_log.h"
 #include "mpu6050.h"
+#include "hmc5883l.h"
 
 #define I2C_MASTER_SDA_IO 21
 #define I2C_MASTER_SCL_IO 22
@@ -84,7 +85,19 @@ void vTaskSensorsI2C(void *arg) {
     mpu6050_data_t processed_data;
     mpu6050_filtered_t filtered_data;
 
-    mpu6050_reset(mpu6050_handle);
+
+
+    // Adicionando HMC5883L ao barramento 
+    i2c_device_config_t hmc5883l_cfg = {
+        .device_address = HMC5883L_I2C_ADDRESS,
+        .scl_speed_hz = I2C_MASTER_FREQ_HZ,
+    };
+
+    i2c_master_dev_handle_t hmc5883l_handle;
+    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &hmc5883l_cfg, &hmc5883l_handle));
+
+    hmc5883l_init(hmc5883l_handle);
+    ESP_LOGI(pcTaskGetName(NULL), "HMC5883L inicializado");
 
     // Struct para enviar para fila
     SensorData_t sensor_data;
@@ -108,8 +121,14 @@ void vTaskSensorsI2C(void *arg) {
         }
 
 
-        esp_err_t ret_hmc = hmc5883l_read_data(hmc5883l_handle, &sensor_data.magnetometer);
-        if (ret_hmc != ESP_OK)
+        magnetometer_data_t magnetometer_data;
+        esp_err_t ret_hmc = hmc5883l_read_data(hmc5883l_handle, &magnetometer_data);
+        if (ret_hmc == ESP_OK){
+            sensor_data.magnetometer.x = magnetometer_data.x;
+            sensor_data.magnetometer.y = magnetometer_data.y;
+            sensor_data.magnetometer.z = magnetometer_data.z;
+        }
+        else
             ESP_LOGW(pcTaskGetName(NULL), "Falha ao ler HMC5883L: %s", esp_err_to_name(ret_hmc));
             
 
@@ -135,7 +154,7 @@ void vTaskWiFi(void *arg){
                                                             received_data.orientation.yaw, received_data.orientation.altitude);
             printf("\n[ACELERACAO (m/s2) X: %.2f | Y: %.2f | Z: %.2f", received_data.mpu6050.accel.x, received_data.mpu6050.accel.y, received_data.mpu6050.accel.z);
             printf("\n[GIROSCOPIO (dps)] X: %.2f | Y: %.2f | Z: %.2f", received_data.mpu6050.gyro.x, received_data.mpu6050.gyro.y, received_data.mpu6050.gyro.z);
-            printf("\n[MAGNETOMETRO (graus)] X: %.2f | Y: %.2f | Z: %.2f", received_data.magnetometer.x, received_data.magnetometer.y, received_data.magnetometer.z);
+            printf("\n[MAGNETOMETRO (gauss)] X: %.2f | Y: %.2f | Z: %.2f", received_data.magnetometer.x, received_data.magnetometer.y, received_data.magnetometer.z);
             printf("\n[BMP180] Temperatura (°C): %.2f | Pressao (kPa): %.2f\n", received_data.bmp180.temperature, received_data.bmp180.pressure);
         }
     }
