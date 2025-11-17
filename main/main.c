@@ -6,7 +6,6 @@
 #include "esp_log.h"
 #include "mpu6050.h"
 #include "hmc5883l.h"
-#include "sensor_fusion.h"
 
 #define I2C_MASTER_SDA_IO 21
 #define I2C_MASTER_SCL_IO 22
@@ -84,7 +83,6 @@ void vTaskSensorsI2C(void *arg) {
     ESP_LOGI(pcTaskGetName(NULL), "MPU6050 inicializado");
     mpu6050_raw_data_t raw_data;
     mpu6050_data_t processed_data;
-    mpu6050_filtered_t filtered_data;
 
 
 
@@ -150,13 +148,14 @@ void vTaskWiFi(void *arg){
         if(xQueueReceive(xQueueSensorsData, &received_data, portMAX_DELAY) == pdTRUE){
             // Processamento desses dados para o wi-fi e envio
             ESP_LOGI(pcTaskGetName(NULL), "Dado da fila consumido");
-            printf("\n\n%s: DADOS RECEBIDOS", pcTaskGetName(NULL));
-            printf("\n[ORIENTACAO (graus)] Pitch: %.2f | Roll: %.2f | Yaw: %.2f | Altitude: %.2f", received_data.orientation.pitch, received_data.orientation.roll, 
-                                                            received_data.orientation.yaw, received_data.orientation.altitude);
-            printf("\n[ACELERACAO (m/s2) X: %.2f | Y: %.2f | Z: %.2f", received_data.mpu6050.accel.x, received_data.mpu6050.accel.y, received_data.mpu6050.accel.z);
-            printf("\n[GIROSCOPIO (dps)] X: %.2f | Y: %.2f | Z: %.2f", received_data.mpu6050.gyro.x, received_data.mpu6050.gyro.y, received_data.mpu6050.gyro.z);
-            printf("\n[MAGNETOMETRO (gauss)] X: %.2f | Y: %.2f | Z: %.2f", received_data.magnetometer.x, received_data.magnetometer.y, received_data.magnetometer.z);
-            printf("\n[BMP180] Temperatura (°C): %.2f | Pressao (kPa): %.2f\n", received_data.bmp180.temperature, received_data.bmp180.pressure);
+            // printf("\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=");
+            // printf("\n%s: DADOS RECEBIDOS", pcTaskGetName(NULL));
+            // printf("\n[ORIENTACAO (graus)] Pitch: %.2f | Roll: %.2f | Yaw: %.2f | Altitude: %.2f", received_data.orientation.pitch, received_data.orientation.roll, 
+            //                                                 received_data.orientation.yaw, received_data.orientation.altitude);
+            // printf("\n[ACELERACAO (m/s2) X: %.2f | Y: %.2f | Z: %.2f", received_data.mpu6050.accel.x, received_data.mpu6050.accel.y, received_data.mpu6050.accel.z);
+            // printf("\n[GIROSCOPIO (dps)] X: %.2f | Y: %.2f | Z: %.2f", received_data.mpu6050.gyro.x, received_data.mpu6050.gyro.y, received_data.mpu6050.gyro.z);
+            // printf("\n[MAGNETOMETRO (gauss)] X: %.2f | Y: %.2f | Z: %.2f", received_data.magnetometer.x, received_data.magnetometer.y, received_data.magnetometer.z);
+            // printf("\n[BMP180] Temperatura (°C): %.2f | Pressao (kPa): %.2f\n", received_data.bmp180.temperature, received_data.bmp180.pressure);
         }
     }
 }
