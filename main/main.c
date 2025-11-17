@@ -14,6 +14,8 @@
 
 #define MPU6050_I2C_ADDRESS 0x68
 
+#define SizeSensorsDataFIFO 30 // Tamanho da fila para os dados dos sensores
+
 // Estruturas para informação dos sensores
 typedef struct {
     float x;
@@ -131,9 +133,15 @@ void vTaskSensorsI2C(void *arg) {
             ESP_LOGW(pcTaskGetName(NULL), "Falha ao ler HMC5883L: %s", esp_err_to_name(ret_hmc));
             
 
-
+        
         // Enviando os dados para a fila
+        // Fazer um tratamento melhor para quando a fila encher e o Wi-Fi nao tiver consumido ainda
         xQueueSend(xQueueSensorsData, &sensor_data, portMAX_DELAY);
+        // Verificando se a fila parou de ser consumida
+        UBaseType_t count = uxQueueMessagesWaiting(xQueueSensorsData);
+        if(count > SizeSensorsDataFIFO - 5){
+            ESP_LOGI(pcTaskGetName(NULL), "Wi-Fi parou de consumir. TAMANHO DA FILA: %u", count);
+        }
 
         vTaskDelay(pdMS_TO_TICKS(AQQUISITION_INTERVAL));
     }
@@ -163,7 +171,7 @@ void vTaskWiFi(void *arg){
 
 void app_main(void) {
     // Criando filas
-    xQueueSensorsData = xQueueCreate(10, sizeof(SensorData_t));
+    xQueueSensorsData = xQueueCreate(SizeSensorsDataFIFO, sizeof(SensorData_t));
 
     // Criando tasks
     xTaskCreate(vTaskSensorsI2C, "vTaskSensorsI2C", 4096, NULL, 5, NULL);
