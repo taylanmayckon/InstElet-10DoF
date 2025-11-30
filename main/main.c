@@ -10,7 +10,7 @@
 // Libs do Wi-Fi
 #include "wifi_manager.h"
 #include "esp_http_client.h"
-// #include "cJSON.h"
+#include "cJSON.h"
 
 // Defines para Wi-Fi
 // #define WIFI_SSID "Galaxy S25+ Taylan"
@@ -67,6 +67,11 @@ typedef struct __attribute__((packed)) {
 // Fila para enviar dados entre tasks
 QueueHandle_t xQueueSensorsData;
 
+// Endereco do servidor para envio dos dados
+char url[128];
+
+
+// Task para aquisição de dados dos sensores via I2C
 void vTaskSensorsI2C(void *arg) {
     // Configurando barramento I2C Master
     i2c_master_bus_config_t bus_config = {
@@ -202,6 +207,74 @@ void vTaskSensorsI2C(void *arg) {
 }
 
 
+
+// Funcao para enviar o JSON via HTTP POST
+void send_json_to_server(SensorData_t *data) {
+    // Montando JSON
+    cJSON *json = cJSON_CreateObject();
+
+    // Acelerometro
+    cJSON *accel = cJSON_CreateObject();
+    cJSON_AddNumberToObject(accel, "x", data->mpu6050.accel.x);
+    cJSON_AddNumberToObject(accel, "y", data->mpu6050.accel.y);
+    cJSON_AddNumberToObject(accel, "z", data->mpu6050.accel.z);
+    cJSON_AddItemToObject(json, "accel", accel);
+
+    // Giroscópio
+    cJSON *gyro = cJSON_CreateObject();
+    cJSON_AddNumberToObject(gyro, "x", data->mpu6050.gyro.x);  
+    cJSON_AddNumberToObject(gyro, "y", data->mpu6050.gyro.y);
+    cJSON_AddNumberToObject(gyro, "z", data->mpu6050.gyro.z);
+    cJSON_AddItemToObject(json, "gyro", gyro);
+    // Magnetometro
+    cJSON *mag = cJSON_CreateObject();
+    cJSON_AddNumberToObject(mag, "x", data->magnetometer.x);
+    cJSON_AddNumberToObject(mag, "y", data->magnetometer.y);
+    cJSON_AddNumberToObject(mag, "z", data->magnetometer.z);
+    cJSON_AddItemToObject(json, "mag", mag);
+    // BMP180
+    cJSON *bmp = cJSON_CreateObject();
+    cJSON_AddNumberToObject(bmp, "temperature", data->bmp180.temperature);
+    cJSON_AddNumberToObject(bmp, "pressure", data->bmp180.pressure);
+    cJSON_AddItemToObject(json, "bmp", bmp);
+    // Orientação
+    cJSON *orientation = cJSON_CreateObject();
+    cJSON_AddNumberToObject(orientation, "pitch", data->orientation.pitch);
+    cJSON_AddNumberToObject(orientation, "roll", data->orientation.roll);
+    cJSON_AddNumberToObject(orientation, "yaw", data->orientation.yaw);
+    cJSON_AddNumberToObject(orientation, "altitude", data->orientation.altitude);
+    cJSON_AddItemToObject(json, "orientation", orientation);
+
+    // Enviando os dados para o endpoint 
+    char *json_str = cJSON_PrintUnformatted(json);
+    esp_http_client_config_t config = {
+        .url = url, 
+        .method = HTTP_METHOD_POST,
+        .timeout_ms = 5000,
+    };
+
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+
+    esp_http_client_set_header(client, "Content-Type", "application/json");
+    esp_http_client_set_post_field(client, json_str, strlen(json_str));
+
+    esp_err_t err = esp_http_client_perform(client);
+    if (err == ESP_OK) {
+        ESP_LOGI("HTTP", "Dados enviados com sucesso, status: %d", esp_http_client_get_status_code(client));
+        ESP_LOGI("HTTP", "URL: %s", url);
+    } else {
+        ESP_LOGE("HTTP", "Erro ao enviar dados: %s", esp_err_to_name(err));
+    }
+
+    esp_http_client_cleanup(client);
+    cJSON_Delete(json);
+    if(json_str) {
+        free(json_str);
+    }
+}
+
+
+// Task para gerenciar o Wi-Fi e envio dos dados
 void vTaskWiFi(void *arg){
     SensorData_t received_data;
 
@@ -209,15 +282,18 @@ void vTaskWiFi(void *arg){
         // Verificando se tem dados a serem coletados da fila
         if(xQueueReceive(xQueueSensorsData, &received_data, portMAX_DELAY) == pdTRUE){
             // Processamento desses dados para o wi-fi e envio
-            // ESP_LOGI(pcTaskGetName(NULL), "Dado da fila consumido");
-            printf("\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=");
-            printf("\n%s: DADOS RECEBIDOS", pcTaskGetName(NULL));
-            printf("\n[ORIENTACAO (graus)] Pitch: %.2f | Roll: %.2f | Yaw: %.2f | Altitude: %.2f", received_data.orientation.pitch, received_data.orientation.roll, 
-                     received_data.orientation.yaw, received_data.orientation.altitude);
-            printf("\n[ACELERACAO (m/s2) X: %.2f | Y: %.2f | Z: %.2f", received_data.mpu6050.accel.x, received_data.mpu6050.accel.y, received_data.mpu6050.accel.z);
-            printf("\n[GIROSCOPIO (dps)] X: %.2f | Y: %.2f | Z: %.2f", received_data.mpu6050.gyro.x, received_data.mpu6050.gyro.y, received_data.mpu6050.gyro.z);
-            printf("\n[MAGNETOMETRO (gauss)] X: %.2f | Y: %.2f | Z: %.2f", received_data.magnetometer.x, received_data.magnetometer.y, received_data.magnetometer.z);
-            printf("\n[BMP180] Temperatura (°C): %.2f | Pressao (kPa): %.2f\n", received_data.bmp180.temperature, received_data.bmp180.pressure);
+            send_json_to_server(&received_data);
+
+            // Debug dos dados recebidos
+            // // ESP_LOGI(pcTaskGetName(NULL), "Dado da fila consumido");
+            // printf("\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=");
+            // printf("\n%s: DADOS RECEBIDOS", pcTaskGetName(NULL));
+            // printf("\n[ORIENTACAO (graus)] Pitch: %.2f | Roll: %.2f | Yaw: %.2f | Altitude: %.2f", received_data.orientation.pitch, received_data.orientation.roll, 
+            //          received_data.orientation.yaw, received_data.orientation.altitude);
+            // printf("\n[ACELERACAO (m/s2) X: %.2f | Y: %.2f | Z: %.2f", received_data.mpu6050.accel.x, received_data.mpu6050.accel.y, received_data.mpu6050.accel.z);
+            // printf("\n[GIROSCOPIO (dps)] X: %.2f | Y: %.2f | Z: %.2f", received_data.mpu6050.gyro.x, received_data.mpu6050.gyro.y, received_data.mpu6050.gyro.z);
+            // printf("\n[MAGNETOMETRO (gauss)] X: %.2f | Y: %.2f | Z: %.2f", received_data.magnetometer.x, received_data.magnetometer.y, received_data.magnetometer.z);
+            // printf("\n[BMP180] Temperatura (°C): %.2f | Pressao (kPa): %.2f\n", received_data.bmp180.temperature, received_data.bmp180.pressure);
         }
     }
 }
@@ -231,6 +307,8 @@ void app_main(void) {
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
     // ESP_LOGI("MAIN", "Conectado ao Wi-Fi! IP: %s", wifi_manager_get_ip());
+    // Montando a URL do servidor com o IP obtido
+    snprintf(url, sizeof(url), "http://%s:8080/sensores", wifi_manager_get_ip());
 
     // Criando filas
     xQueueSensorsData = xQueueCreate(SizeSensorsDataFIFO, sizeof(SensorData_t));
