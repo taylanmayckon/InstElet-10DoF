@@ -13,10 +13,8 @@
 #include "cJSON.h"
 
 // Defines para Wi-Fi
-// #define WIFI_SSID "Galaxy S25+ Taylan"
-// #define WIFI_PASSWORD "sanfoninha"
-#define WIFI_SSID "Wokwi-GUEST"
-#define WIFI_PASSWORD ""
+#define WIFI_SSID "Galaxy S25+ Taylan"
+#define WIFI_PASSWORD "sanfoninha"
 
 // Defines para I2C e aquisição de dados
 #define I2C_MASTER_SDA_IO 21
