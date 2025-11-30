@@ -7,7 +7,18 @@
 #include "mpu6050.h"
 #include "hmc5883l.h"
 #include "bmp180.h" // Incluindo o header do BMP180
+// Libs do Wi-Fi
+#include "wifi_manager.h"
+#include "esp_http_client.h"
+// #include "cJSON.h"
 
+// Defines para Wi-Fi
+// #define WIFI_SSID "Galaxy S25+ Taylan"
+// #define WIFI_PASSWORD "sanfoninha"
+#define WIFI_SSID "Wokwi-GUEST"
+#define WIFI_PASSWORD ""
+
+// Defines para I2C e aquisição de dados
 #define I2C_MASTER_SDA_IO 21
 #define I2C_MASTER_SCL_IO 22
 #define I2C_MASTER_FREQ_HZ 100000
@@ -213,6 +224,14 @@ void vTaskWiFi(void *arg){
 
 
 void app_main(void) {
+    // Inicializando Wi-Fi
+    wifi_manager_init(WIFI_SSID, WIFI_PASSWORD);
+    while(!wifi_manager_is_connected()){
+        ESP_LOGI("MAIN", "Aguardando conexão Wi-Fi...");
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+    // ESP_LOGI("MAIN", "Conectado ao Wi-Fi! IP: %s", wifi_manager_get_ip());
+
     // Criando filas
     xQueueSensorsData = xQueueCreate(SizeSensorsDataFIFO, sizeof(SensorData_t));
 
