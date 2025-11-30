@@ -33,18 +33,31 @@ static esp_err_t bmp180_i2c_write(i2c_master_dev_handle_t dev_handle, uint8_t re
  * @param ut Valor da temperatura não compensada.
  */
 static void calculate_b5_compensation(bmp180_dev_t *dev, int32_t ut) {
-    // FÓRMULAS BMP180 AQUI: Implementar a complexa equação do Datasheet para B5
-    // Exemplo Simples (Não use em produção!):
-    dev->b5_comp = (ut - dev->calib_params.ac6) * dev->calib_params.ac5 / 32768;
+    // Equação da Etapa 2: Cálculo do B5
+    // O valor de B5 é armazenado para uso posterior no cálculo da pressão.
+    
+    // X1 = (UT - AC6) * AC5 / 2^15
+    int32_t x1 = ((int32_t)ut - dev->calib_params.ac6) * dev->calib_params.ac5 / 32768;
+    
+    // X2 = MC * 2^11 / (X1 + MD)
+    int32_t x2 = (int32_t)dev->calib_params.mc * 2048 / (x1 + dev->calib_params.md);
+    
+    // B5 = X1 + X2
+    dev->b5_comp = x1 + x2;
 }
 
 /**
  * @brief Compensa a temperatura.
  */
 static int32_t compensate_temperature(bmp180_dev_t *dev, int32_t ut) {
-    calculate_b5_compensation(dev, ut); // Calcula B5 primeiro
-    // FÓRMULAS BMP180 AQUI: Implementar a equação do Datasheet (resultado em 0.1 C)
-    return (dev->b5_comp + 8) >> 4; // Exemplo Simples: (T * 10)
+    // 1. Calcula B5
+    calculate_b5_compensation(dev, ut); 
+    
+    // 2. Equação da Etapa 3: Cálculo da Temperatura T
+    // T = (B5 + 8) / 16. O resultado é a temperatura real em 0.1 °C.
+    int32_t temperature = (dev->b5_comp + 8) / 16;
+    
+    return temperature;
 }
 
 /**
