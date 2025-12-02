@@ -18,7 +18,7 @@
 #define BMP180_CMD_READ_PRESS_OSS0  0x34    // Comando para iniciar medição de pressão (OSS=0, Standard)
 
 // Fator de Oversampling (OSS) - ajustável se necessário (0 a 3)
-#define BMP180_OSS                  0 // Simplificação para este exemplo
+#define BMP180_OSS 1 // Simplificação para este exemplo
 
 /**
  * @brief Estrutura para armazenar os coeficientes de calibração lidos do sensor.
