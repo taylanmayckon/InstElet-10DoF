@@ -2,6 +2,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <math.h>
 
 static const char *TAG = "BMP180_DRV";
 
@@ -24,36 +25,56 @@ static esp_err_t bmp180_i2c_write(i2c_master_dev_handle_t dev_handle, uint8_t re
     return i2c_master_transmit(dev_handle, write_buf, 2, -1);
 }
 
-// --- Fórmulas de Compensação (simplificadas para este exemplo, DEVEM ser as do Datasheet) ---
+// --- Fórmulas de Compensação (Datasheet BMP180) ---
 
 /**
- * @brief Simula o cálculo da compensação B5 (necessária para Temperatura e Pressão).
- * Em um driver real, B5 é uma variável crucial calculada a partir da temperatura não compensada (UT).
- * * @param dev Estrutura do driver.
- * @param ut Valor da temperatura não compensada.
+ * @brief Calcula B5 conforme datasheet BMP180.
  */
 static void calculate_b5_compensation(bmp180_dev_t *dev, int32_t ut) {
-    // FÓRMULAS BMP180 AQUI: Implementar a complexa equação do Datasheet para B5
-    // Exemplo Simples (Não use em produção!):
-    dev->b5_comp = (ut - dev->calib_params.ac6) * dev->calib_params.ac5 / 32768;
+    int32_t x1 = (ut - (int32_t)dev->calib_params.ac6) * (int32_t)dev->calib_params.ac5 >> 15;
+    int32_t x2 = ((int32_t)dev->calib_params.mc << 11) / (x1 + (int32_t)dev->calib_params.md);
+    dev->b5_comp = x1 + x2;
 }
 
 /**
- * @brief Compensa a temperatura.
+ * @brief Compensa a temperatura usando as fórmulas do datasheet BMP180.
  */
 static int32_t compensate_temperature(bmp180_dev_t *dev, int32_t ut) {
-    calculate_b5_compensation(dev, ut); // Calcula B5 primeiro
-    // FÓRMULAS BMP180 AQUI: Implementar a equação do Datasheet (resultado em 0.1 C)
-    return (dev->b5_comp + 8) >> 4; // Exemplo Simples: (T * 10)
+    calculate_b5_compensation(dev, ut);
+    return (dev->b5_comp + 8) >> 4;
 }
 
 /**
- * @brief Compensa a pressão.
+ * @brief Compensa a pressão usando as fórmulas do datasheet BMP180.
  */
 static int32_t compensate_pressure(bmp180_dev_t *dev, int32_t up) {
-    // FÓRMULAS BMP180 AQUI: Implementar a equação do Datasheet (usa B5 já calculado)
-    // Exemplo Simples: (P em Pa)
-    return 100000;
+    int32_t b6, x1, x2, x3, b3, p;
+    uint32_t b4, b7;
+
+    b6 = dev->b5_comp - 4000;
+    x1 = (dev->calib_params.b2 * (b6 * b6 >> 12)) >> 11;
+    x2 = (dev->calib_params.ac2 * b6) >> 11;
+    x3 = x1 + x2;
+    b3 = (((((int32_t)dev->calib_params.ac1) * 4 + x3) << BMP180_OSS) + 2) >> 2;
+
+    x1 = (dev->calib_params.ac3 * b6) >> 13;
+    x2 = (dev->calib_params.b1 * ((b6 * b6) >> 12)) >> 16;
+    x3 = ((x1 + x2) + 2) >> 2;
+    b4 = (dev->calib_params.ac4 * (uint32_t)(x3 + 32768)) >> 15;
+
+    b7 = ((uint32_t)up - b3) * (50000 >> BMP180_OSS);
+    if (b7 < 0x80000000) {
+        p = (b7 << 1) / b4;
+    } else {
+        p = (b7 / b4) << 1;
+    }
+
+    x1 = (p >> 8) * (p >> 8);
+    x1 = (x1 * 3038) >> 16;
+    x2 = (-7357 * p) >> 16;
+    p = p + ((x1 + x2 + 3791) >> 4);
+
+    return p;
 }
 
 // --- Funções de Driver ---
@@ -159,6 +180,16 @@ esp_err_t bmp180_read_pressure(bmp180_dev_t *dev, int32_t *pressure) {
 
     // 4. Compensa a pressão
     *pressure = compensate_pressure(dev, uncompensated_pressure);
+    
+    return ESP_OK;
+}
+
+esp_err_t bmp180_read_altitude(int32_t pressure, float *altitude) {
+    if (!altitude) return ESP_ERR_INVALID_ARG;
+    
+    // Fórmula barométrica: Altitude = 44330 * (1 - (p/p0)^(1/5.255))
+    // p0 = 101325 Pa (Pressão padrão ao nível do mar)
+    *altitude = 44330.0f * (1.0f - powf((float)pressure / 101325.0f, 0.1903f));
     
     return ESP_OK;
 }
