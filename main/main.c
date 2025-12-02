@@ -216,32 +216,32 @@ void send_json_to_server(SensorData_t *data) {
     cJSON_AddNumberToObject(accel, "x", data->mpu6050.accel.x);
     cJSON_AddNumberToObject(accel, "y", data->mpu6050.accel.y);
     cJSON_AddNumberToObject(accel, "z", data->mpu6050.accel.z);
-    cJSON_AddItemToObject(json, "accel", accel);
+    cJSON_AddItemToObject(json, "acelerometro", accel);
 
     // Giroscópio
     cJSON *gyro = cJSON_CreateObject();
     cJSON_AddNumberToObject(gyro, "x", data->mpu6050.gyro.x);  
     cJSON_AddNumberToObject(gyro, "y", data->mpu6050.gyro.y);
     cJSON_AddNumberToObject(gyro, "z", data->mpu6050.gyro.z);
-    cJSON_AddItemToObject(json, "gyro", gyro);
+    cJSON_AddItemToObject(json, "giroscopio", gyro);
     // Magnetometro
     cJSON *mag = cJSON_CreateObject();
     cJSON_AddNumberToObject(mag, "x", data->magnetometer.x);
     cJSON_AddNumberToObject(mag, "y", data->magnetometer.y);
     cJSON_AddNumberToObject(mag, "z", data->magnetometer.z);
-    cJSON_AddItemToObject(json, "mag", mag);
+    cJSON_AddItemToObject(json, "magnetometro", mag);
     // BMP180
     cJSON *bmp = cJSON_CreateObject();
-    cJSON_AddNumberToObject(bmp, "temperature", data->bmp180.temperature);
-    cJSON_AddNumberToObject(bmp, "pressure", data->bmp180.pressure);
-    cJSON_AddItemToObject(json, "bmp", bmp);
-    // Orientação
-    cJSON *orientation = cJSON_CreateObject();
-    cJSON_AddNumberToObject(orientation, "pitch", data->orientation.pitch);
-    cJSON_AddNumberToObject(orientation, "roll", data->orientation.roll);
-    cJSON_AddNumberToObject(orientation, "yaw", data->orientation.yaw);
-    cJSON_AddNumberToObject(orientation, "altitude", data->orientation.altitude);
-    cJSON_AddItemToObject(json, "orientation", orientation);
+    cJSON_AddNumberToObject(bmp, "temperatura", data->bmp180.temperature);
+    cJSON_AddNumberToObject(bmp, "pressao", data->bmp180.pressure);
+    cJSON_AddItemToObject(json, "bmp180", bmp);
+    // // Orientação
+    // cJSON *orientation = cJSON_CreateObject();
+    // cJSON_AddNumberToObject(orientation, "pitch", data->orientation.pitch);
+    // cJSON_AddNumberToObject(orientation, "roll", data->orientation.roll);
+    // cJSON_AddNumberToObject(orientation, "yaw", data->orientation.yaw);
+    // cJSON_AddNumberToObject(orientation, "altitude", data->orientation.altitude);
+    // cJSON_AddItemToObject(json, "orientation", orientation);
 
     // Enviando os dados para o endpoint 
     char *json_str = cJSON_PrintUnformatted(json);
