@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include "esp_timer.h"
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -14,6 +15,7 @@ extern "C" {
 }
 // Includes para filtro de Madgwick
 #include <cstdio>
+#include <cmath>
 #include "madgwick_filter.hpp"
 // Libs do Wi-Fi
 #include "esp_http_client.h"
@@ -34,10 +36,10 @@ extern "C" {
 
 #define MPU6050_I2C_ADDRESS 0x68
 
-#define SizeSensorsDataFIFO 30 // Tamanho da fila para os dados dos sensores
+#define SizeSensorsDataFIFO 100 // Tamanho da fila para os dados dos sensores
 
 // Endereco do servidor para envio dos dados
-#define SERVER_IP "http://192.168.18.165:8080"
+#define SERVER_IP "http://10.169.40.182:8080"
 char url[128];
 
 // Estruturas para informação dos sensores
@@ -145,12 +147,25 @@ void vTaskSensorsI2C(void *arg) {
     // Struct para enviar para fila
     SensorData_t sensor_data = {0}; // Inicializa a struct com zeros para segurança
 
+    // --- INICIALIZAÇÃO DO MADGWICK ---
+    float beta = 0.1f; // Ganho do filtro
+    espp::MadgwickFilter filter(beta);
+
     // Variaveis para controle de tempo
     TickType_t xLastWakeTime = xTaskGetTickCount();
     const TickType_t xFrequency = pdMS_TO_TICKS(SAMPLE_INTERVAL);
     uint32_t loop_counter = 0;
 
+    float last_time = (float)esp_timer_get_time() / 1000000.0f;
+    float current_time = 0;
+    float dt = 0;
+
     while (1) {
+        // Calculando o dt para o Filtro de Madgwick
+        current_time = (float)esp_timer_get_time() / 1000000.0f;
+        dt = current_time - last_time;
+        last_time = current_time;
+
         // --- Leitura do MPU6050 ---
         esp_err_t ret_mpu = mpu6050_read_raw(mpu6050_handle, &raw_data);
         if (ret_mpu == ESP_OK) {
@@ -174,7 +189,28 @@ void vTaskSensorsI2C(void *arg) {
             
 
         // --- Filtro de Madgwick para o 9DOF (MPU6050 + HMC5883L) ---
+        // Convertendo Giroscopio de Graus/s para Rad/s
+        float gx_rad = gyro.x * (M_PI / 180.0f);
+        float gy_rad = gyro.y * (M_PI / 180.0f);
+        float gz_rad = gyro.z * (M_PI / 180.0f);
 
+        // Atualizando o filtro (9DOF)
+        filter.update(
+            dt, // Intervalo de tempo em segundos
+            accel.x, accel.y, accel.z, // Acelerometro em g
+            gx_rad, gy_rad, gz_rad, // Giroscopio em rad/s
+            magnetometer_data.y, -magnetometer_data.x, magnetometer_data.z // Magnetometro em uT
+        );
+        // Algumas placas tem o Mag X e Y invertidos, se for o caso:
+        // filter.update(..., magnetometer_data.y, -magnetometer_data.x, magnetometer_data.z);
+        // Se nao filter.update(..., magnetometer_data.x, magnetometer_data.y, magnetometer_data.z);
+        
+        // Obtendo os ângulos de Euler (em graus)
+        float pitch, roll, yaw;
+        filter.get_euler(pitch, roll, yaw);
+        sensor_data.orientation.pitch = pitch;
+        sensor_data.orientation.roll = roll;
+        sensor_data.orientation.yaw = yaw;
 
 
         // --- TAREFA LENTA (Controlada pelo contador calculado) ---
@@ -313,15 +349,15 @@ void vTaskWiFi(void *arg){
             send_json_to_server(&received_data);
 
             // Debug dos dados recebidos
-            // // ESP_LOGI(pcTaskGetName(NULL), "Dado da fila consumido");
-            // printf("\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=");
-            // printf("\n%s: DADOS RECEBIDOS", pcTaskGetName(NULL));
-            // printf("\n[ORIENTACAO (graus)] Pitch: %.2f | Roll: %.2f | Yaw: %.2f | Altitude: %.2f", received_data.orientation.pitch, received_data.orientation.roll, 
-            //          received_data.orientation.yaw, received_data.orientation.altitude);
-            // printf("\n[ACELERACAO (m/s2) X: %.2f | Y: %.2f | Z: %.2f", received_data.mpu6050.accel.x, received_data.mpu6050.accel.y, received_data.mpu6050.accel.z);
-            // printf("\n[GIROSCOPIO (dps)] X: %.2f | Y: %.2f | Z: %.2f", received_data.mpu6050.gyro.x, received_data.mpu6050.gyro.y, received_data.mpu6050.gyro.z);
-            // printf("\n[MAGNETOMETRO (gauss)] X: %.2f | Y: %.2f | Z: %.2f", received_data.magnetometer.x, received_data.magnetometer.y, received_data.magnetometer.z);
-            // printf("\n[BMP180] Temperatura (°C): %.2f | Pressao (kPa): %.2f\n", received_data.bmp180.temperature, received_data.bmp180.pressure);
+            // ESP_LOGI(pcTaskGetName(NULL), "Dado da fila consumido");
+            printf("\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=");
+            printf("\n%s: DADOS RECEBIDOS", pcTaskGetName(NULL));
+            printf("\n[ORIENTACAO (graus)] Pitch: %.2f | Roll: %.2f | Yaw: %.2f | Altitude: %.2f", received_data.orientation.pitch, received_data.orientation.roll, 
+                     received_data.orientation.yaw, received_data.orientation.altitude);
+            printf("\n[ACELERACAO (g) X: %.2f | Y: %.2f | Z: %.2f", received_data.mpu6050.accel.x, received_data.mpu6050.accel.y, received_data.mpu6050.accel.z);
+            printf("\n[GIROSCOPIO (dps)] X: %.2f | Y: %.2f | Z: %.2f", received_data.mpu6050.gyro.x, received_data.mpu6050.gyro.y, received_data.mpu6050.gyro.z);
+            printf("\n[MAGNETOMETRO (gauss)] X: %.2f | Y: %.2f | Z: %.2f", received_data.magnetometer.x, received_data.magnetometer.y, received_data.magnetometer.z);
+            printf("\n[BMP180] Temperatura (°C): %.2f | Pressao (kPa): %.2f\n", received_data.bmp180.temperature, received_data.bmp180.pressure);
         }
     }
 }
