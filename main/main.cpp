@@ -22,8 +22,8 @@ extern "C" {
 #include "cJSON.h"
 
 // Defines para Wi-Fi
-#define WIFI_SSID "Galaxy S25+ Taylan"
-#define WIFI_PASSWORD "sanfoninha"
+#define WIFI_SSID "FULL HOUSE JR TELECOM 2.4"
+#define WIFI_PASSWORD "Golfinho18"
 
 // Defines para I2C e aquisição de dados
 #define I2C_MASTER_SDA_IO GPIO_NUM_21
@@ -31,7 +31,7 @@ extern "C" {
 #define I2C_MASTER_FREQ_HZ 400000
 #define SAMPLE_FREQ_HZ 100 // Frequencia de amostragem dos sensores em Hz (MPU6050 e HMC5883L + Filtro)
 #define SAMPLE_INTERVAL (1000/SAMPLE_FREQ_HZ) // Intervalo de captura de dados em ms (MPU6050 e HMC5883L + Filtro)
-#define SEND_SAMPLE_INTERVAL 500 // Intervalo de envio dos dados via Wi-Fi/Leitura do BMP 
+#define SEND_SAMPLE_INTERVAL 1000 // Intervalo de envio dos dados via Wi-Fi/Leitura do BMP 
 #define SEND_SAMPLE_COUNTER_LIMIT (SEND_SAMPLE_INTERVAL / SAMPLE_INTERVAL) // Contador para envio dos dados via Wi-Fi/Leitura do BMP
 
 #define MPU6050_I2C_ADDRESS 0x68
@@ -39,7 +39,7 @@ extern "C" {
 #define SizeSensorsDataFIFO 100 // Tamanho da fila para os dados dos sensores
 
 // Endereco do servidor para envio dos dados
-#define SERVER_IP "http://10.169.40.182:8080"
+#define SERVER_IP "http://192.168.1.10:4000"
 char url[128];
 
 // Estruturas para informação dos sensores
@@ -60,6 +60,7 @@ typedef struct {
 typedef struct {
     float temperature;
     float pressure; // Usaremos kPa para facilitar a visualização no log
+    float altitude;
 } BMP180_data_t;
 
 // Dados derivados de fusão sensorial
@@ -67,7 +68,7 @@ typedef struct {
     float pitch;
     float roll;
     float yaw;
-    float altitude;
+    //float altitude; // Altitude movida para BMP180_data_t
 } Orientation_data_t;
 
 // Estrutura completa dos sensores do GY-87
@@ -244,9 +245,18 @@ void vTaskSensorsI2C(void *arg) {
                 if (bmp180_read_pressure(&bmp180_dev, &raw_pressure) == ESP_OK) {
                     // Converte de Pa para kPa (1 kPa = 1000 Pa)
                     sensor_data.bmp180.pressure = (float)raw_pressure / 1000.0f;
-                } else {
-                    ESP_LOGW(pcTaskGetName(NULL), "Falha ao ler Pressão BMP180");
-                    sensor_data.bmp180.pressure = 0.0f;
+
+                    // Calcula a altitude baseada na pressão                
+                    float altitude_meters;                
+                    if (bmp180_read_altitude(raw_pressure, &altitude_meters) == ESP_OK) {                    
+                        sensor_data.bmp180.altitude = altitude_meters;                
+                    } else {                
+                        sensor_data.bmp180.altitude = 0.0f;                
+                    }                         
+                } else {            
+                    ESP_LOGW(pcTaskGetName(NULL), "Falha ao ler Pressão BMP180");                
+                    sensor_data.bmp180.pressure = 0.0f;                
+                    sensor_data.bmp180.altitude = 0.0f;            
                 }
             }
 
@@ -306,7 +316,7 @@ void send_json_to_server(SensorData_t *data) {
     cJSON_AddNumberToObject(orientation, "pitch", data->orientation.pitch);
     cJSON_AddNumberToObject(orientation, "roll", data->orientation.roll);
     cJSON_AddNumberToObject(orientation, "yaw", data->orientation.yaw);
-    cJSON_AddNumberToObject(orientation, "altitude", data->orientation.altitude);
+    cJSON_AddNumberToObject(orientation, "altitude", data->bmp180.altitude);
     cJSON_AddItemToObject(json, "orientation", orientation);
 
     // Enviando os dados para o endpoint 
@@ -353,7 +363,7 @@ void vTaskWiFi(void *arg){
             printf("\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=");
             printf("\n%s: DADOS RECEBIDOS", pcTaskGetName(NULL));
             printf("\n[ORIENTACAO (graus)] Pitch: %.2f | Roll: %.2f | Yaw: %.2f | Altitude: %.2f", received_data.orientation.pitch, received_data.orientation.roll, 
-                     received_data.orientation.yaw, received_data.orientation.altitude);
+                     received_data.orientation.yaw, received_data.bmp180.altitude);
             printf("\n[ACELERACAO (g)] X: %.2f | Y: %.2f | Z: %.2f", received_data.mpu6050.accel.x, received_data.mpu6050.accel.y, received_data.mpu6050.accel.z);
             printf("\n[GIROSCOPIO (dps)] X: %.2f | Y: %.2f | Z: %.2f", received_data.mpu6050.gyro.x, received_data.mpu6050.gyro.y, received_data.mpu6050.gyro.z);
             printf("\n[MAGNETOMETRO (gauss)] X: %.2f | Y: %.2f | Z: %.2f", received_data.magnetometer.x, received_data.magnetometer.y, received_data.magnetometer.z);
