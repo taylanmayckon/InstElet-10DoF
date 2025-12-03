@@ -1,14 +1,21 @@
 #include <stdio.h>
+#include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "driver/i2c_master.h"
 #include "esp_log.h"
-#include "mpu6050.h"
-#include "hmc5883l.h"
-#include "bmp180.h" // Incluindo o header do BMP180
+// Includes dos nossos drivers em C
+extern "C" {
+    #include "mpu6050.h"   
+    #include "hmc5883l.h"
+    #include "bmp180.h"
+    #include "wifi_manager.h"
+}
+// Includes para filtro de Madgwick
+#include <cstdio>
+#include "madgwick_filter.hpp"
 // Libs do Wi-Fi
-#include "wifi_manager.h"
 #include "esp_http_client.h"
 #include "cJSON.h"
 
@@ -17,8 +24,8 @@
 #define WIFI_PASSWORD "sanfoninha"
 
 // Defines para I2C e aquisição de dados
-#define I2C_MASTER_SDA_IO 21
-#define I2C_MASTER_SCL_IO 22
+#define I2C_MASTER_SDA_IO GPIO_NUM_21
+#define I2C_MASTER_SCL_IO GPIO_NUM_22
 #define I2C_MASTER_FREQ_HZ 400000
 #define SAMPLE_FREQ_HZ 100 // Frequencia de amostragem dos sensores em Hz (MPU6050 e HMC5883L + Filtro)
 #define SAMPLE_INTERVAL (1000/SAMPLE_FREQ_HZ) // Intervalo de captura de dados em ms (MPU6050 e HMC5883L + Filtro)
@@ -82,7 +89,7 @@ void vTaskSensorsI2C(void *arg) {
         .scl_io_num = I2C_MASTER_SCL_IO,
         .clk_source = I2C_CLK_SRC_DEFAULT,
         .glitch_ignore_cnt = 7,
-        .flags.enable_internal_pullup = true,
+        .flags {.enable_internal_pullup = true},
     };
 
     i2c_master_bus_handle_t bus_handle;
@@ -320,7 +327,7 @@ void vTaskWiFi(void *arg){
 }
 
 
-void app_main(void) {
+extern "C" void app_main(void) {
     // Inicializando Wi-Fi
     wifi_manager_init(WIFI_SSID, WIFI_PASSWORD);
     while(!wifi_manager_is_connected()){
@@ -329,7 +336,7 @@ void app_main(void) {
     }
     // ESP_LOGI("MAIN", "Conectado ao Wi-Fi! IP: %s", wifi_manager_get_ip());
     // Montando a URL do servidor com o IP obtido
-    snprintf(url, sizeof(url), "%s/sensores", wifi_manager_get_ip());
+    snprintf(url, sizeof(url), "%s/sensores", SERVER_IP);
 
     // Criando filas
     xQueueSensorsData = xQueueCreate(SizeSensorsDataFIFO, sizeof(SensorData_t));
