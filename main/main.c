@@ -19,8 +19,11 @@
 // Defines para I2C e aquisição de dados
 #define I2C_MASTER_SDA_IO 21
 #define I2C_MASTER_SCL_IO 22
-#define I2C_MASTER_FREQ_HZ 100000
-#define AQQUISITION_INTERVAL 600 // Intervalo de captura de dados em ms
+#define I2C_MASTER_FREQ_HZ 400000
+#define SAMPLE_FREQ_HZ 100 // Frequencia de amostragem dos sensores em Hz (MPU6050 e HMC5883L + Filtro)
+#define SAMPLE_INTERVAL (1000/SAMPLE_FREQ_HZ) // Intervalo de captura de dados em ms (MPU6050 e HMC5883L + Filtro)
+#define SEND_SAMPLE_INTERVAL 500 // Intervalo de envio dos dados via Wi-Fi/Leitura do BMP 
+#define SEND_SAMPLE_COUNTER_LIMIT (SEND_SAMPLE_INTERVAL / SAMPLE_INTERVAL) // Contador para envio dos dados via Wi-Fi/Leitura do BMP
 
 #define MPU6050_I2C_ADDRESS 0x68
 
@@ -117,7 +120,7 @@ void vTaskSensorsI2C(void *arg) {
 
     // --- BMP180 (Barômetro/Termômetro) ---
     // Estrutura do driver do BMP180
-    bmp180_dev_t bmp180_dev; 
+    bmp180_dev_t bmp180_dev = {0}; 
     
     // Inicializa o BMP180 e lê os parâmetros de calibração
     esp_err_t ret_bmp = bmp180_init(bus_handle, &bmp180_dev);
@@ -127,9 +130,18 @@ void vTaskSensorsI2C(void *arg) {
         ESP_LOGE(pcTaskGetName(NULL), "Falha ao inicializar BMP180: %s", esp_err_to_name(ret_bmp));
     }
 
+    // Estruturas para os dados de sensores
+    axis_t accel = {0};
+    axis_t gyro = {0};
+    magnetometer_data_t magnetometer_data = {0};
 
     // Struct para enviar para fila
     SensorData_t sensor_data = {0}; // Inicializa a struct com zeros para segurança
+
+    // Variaveis para controle de tempo
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    const TickType_t xFrequency = pdMS_TO_TICKS(SAMPLE_INTERVAL);
+    uint32_t loop_counter = 0;
 
     while (1) {
         // --- Leitura do MPU6050 ---
@@ -138,70 +150,80 @@ void vTaskSensorsI2C(void *arg) {
             // Processa dados e aplica filtro de Kalmann
             mpu6050_proccess_data(raw_data, &processed_data);
 
-            // Alocando os valores na struct da fila
-            axis_t accel = {processed_data.accel_x, processed_data.accel_y, processed_data.accel_z};
-            axis_t gyro = {processed_data.gyro_x, processed_data.gyro_y, processed_data.gyro_z};
+            // Alocando os valores nas variaveis de eixo
+            accel.x = processed_data.accel_x;
+            accel.y = processed_data.accel_y;
+            accel.z = processed_data.accel_z;
+            gyro.x = processed_data.gyro_x;
+            gyro.y = processed_data.gyro_y;
+            gyro.z = processed_data.gyro_z;
+        } else 
+            ESP_LOGW(pcTaskGetName(NULL), "Falha ao ler MPU6050: %s", esp_err_to_name(ret_mpu));
+
+        // --- Leitura do HMC5883L ---
+        esp_err_t ret_hmc = hmc5883l_read_data(hmc5883l_handle, &magnetometer_data);
+        if (ret_hmc != ESP_OK)
+            ESP_LOGW(pcTaskGetName(NULL), "Falha ao ler HMC5883L: %s", esp_err_to_name(ret_hmc));
+            
+
+        // --- Filtro de Madgwick para o 9DOF (MPU6050 + HMC5883L) ---
+
+
+
+        // --- TAREFA LENTA (Controlada pelo contador calculado) ---
+        // É a leitura do BMP180 e envio dos dados via Wi-Fi a cada 500ms
+        loop_counter++;
+        if(loop_counter >= SEND_SAMPLE_COUNTER_LIMIT){
+            // Preparando os dados para a fila
             sensor_data.mpu6050.accel = accel;
             sensor_data.mpu6050.gyro = gyro;
             sensor_data.mpu6050.temperature = processed_data.temp;
-            // Debug 
-            // mpu6050_debug_data(processed_data, filtered_data);
-        } else {
-            ESP_LOGW(pcTaskGetName(NULL), "Falha ao ler MPU6050: %s", esp_err_to_name(ret_mpu));
-        }
-
-        // --- Leitura do HMC5883L ---
-        magnetometer_data_t magnetometer_data;
-        esp_err_t ret_hmc = hmc5883l_read_data(hmc5883l_handle, &magnetometer_data);
-        if (ret_hmc == ESP_OK){
             sensor_data.magnetometer.x = magnetometer_data.x;
             sensor_data.magnetometer.y = magnetometer_data.y;
             sensor_data.magnetometer.z = magnetometer_data.z;
-        }
-        else
-            ESP_LOGW(pcTaskGetName(NULL), "Falha ao ler HMC5883L: %s", esp_err_to_name(ret_hmc));
-            
-        // --- Leitura do BMP180 ---
-        if (ret_bmp == ESP_OK) {
-            int32_t raw_temp, raw_pressure;
 
-            // Leitura da Temperatura (retorna em 0.1 C)
-            if (bmp180_read_temperature(&bmp180_dev, &raw_temp) == ESP_OK) {
-                // Converte de 0.1 C para float C
-                sensor_data.bmp180.temperature = (float)raw_temp / 10.0f; 
+            // --- Leitura do BMP180 --
+            if (ret_bmp == ESP_OK) {
+                int32_t raw_temp, raw_pressure;
+
+                // Leitura da Temperatura (retorna em 0.1 C)
+                if (bmp180_read_temperature(&bmp180_dev, &raw_temp) == ESP_OK) {
+                    // Converte de 0.1 C para float C
+                    sensor_data.bmp180.temperature = (float)raw_temp / 10.0f; 
+                } else {
+                    ESP_LOGW(pcTaskGetName(NULL), "Falha ao ler Temp BMP180");
+                    sensor_data.bmp180.temperature = 0.0f;
+                }
+
+                // Leitura da Pressão (retorna em Pa)
+                // Nota: A leitura de pressão deve ser feita APÓS a leitura de temperatura
+                // pois depende do valor de compensação B5 gerado na leitura de temperatura.
+                if (bmp180_read_pressure(&bmp180_dev, &raw_pressure) == ESP_OK) {
+                    // Converte de Pa para kPa (1 kPa = 1000 Pa)
+                    sensor_data.bmp180.pressure = (float)raw_pressure / 1000.0f;
+                } else {
+                    ESP_LOGW(pcTaskGetName(NULL), "Falha ao ler Pressão BMP180");
+                    sensor_data.bmp180.pressure = 0.0f;
+                }
+            }
+
+            // Enviando os dados para a fila
+            // Fazer um tratamento melhor para quando a fila encher e o Wi-Fi nao tiver consumido ainda
+            if (xQueueSend(xQueueSensorsData, &sensor_data, 0) != pdPASS) { // Usamos 0 de tempo de espera (não bloqueante)
+                UBaseType_t count = uxQueueMessagesWaiting(xQueueSensorsData);
+                ESP_LOGW(pcTaskGetName(NULL), "Fila cheia! Dados descartados. TAMANHO ATUAL: %u", count);
             } else {
-                ESP_LOGW(pcTaskGetName(NULL), "Falha ao ler Temp BMP180");
-                sensor_data.bmp180.temperature = 0.0f;
+                // Verificando se a fila parou de ser consumida
+                UBaseType_t count = uxQueueMessagesWaiting(xQueueSensorsData);
+                if(count > SizeSensorsDataFIFO - 5){
+                    ESP_LOGI(pcTaskGetName(NULL), "Wi-Fi parou de consumir. TAMANHO DA FILA: %u", count);
+                }
             }
-
-            // Leitura da Pressão (retorna em Pa)
-            // Nota: A leitura de pressão deve ser feita APÓS a leitura de temperatura
-            // pois depende do valor de compensação B5 gerado na leitura de temperatura.
-            if (bmp180_read_pressure(&bmp180_dev, &raw_pressure) == ESP_OK) {
-                // Converte de Pa para kPa (1 kPa = 1000 Pa)
-                sensor_data.bmp180.pressure = (float)raw_pressure / 1000.0f;
-            } else {
-                ESP_LOGW(pcTaskGetName(NULL), "Falha ao ler Pressão BMP180");
-                sensor_data.bmp180.pressure = 0.0f;
-            }
-        }
-
-
-        // Enviando os dados para a fila
-        // Fazer um tratamento melhor para quando a fila encher e o Wi-Fi nao tiver consumido ainda
-        if (xQueueSend(xQueueSensorsData, &sensor_data, 0) != pdPASS) { // Usamos 0 de tempo de espera (não bloqueante)
-            UBaseType_t count = uxQueueMessagesWaiting(xQueueSensorsData);
-            ESP_LOGW(pcTaskGetName(NULL), "Fila cheia! Dados descartados. TAMANHO ATUAL: %u", count);
-        } else {
-            // Verificando se a fila parou de ser consumida
-            UBaseType_t count = uxQueueMessagesWaiting(xQueueSensorsData);
-            if(count > SizeSensorsDataFIFO - 5){
-                ESP_LOGI(pcTaskGetName(NULL), "Wi-Fi parou de consumir. TAMANHO DA FILA: %u", count);
-            }
+            loop_counter = 0; // Reseta o contador apos a tarefa lenta
         }
         
-
-        vTaskDelay(pdMS_TO_TICKS(AQQUISITION_INTERVAL));
+        
+        vTaskDelayUntil(&xLastWakeTime, xFrequency); // Funcao de delay precisa para os 10ms/100Hz
     }
 }
 
