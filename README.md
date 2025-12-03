@@ -77,7 +77,7 @@ idf.py add-dependency "espp/filters^1.0.31"
 
 ### 1. Clonar o Repositório
 ```bash
-git clone [https://github.com/taylanmayckon/InstElet-10DoF](https://github.com/taylanmayckon/InstElet-10DoF)
+git clone https://github.com/taylanmayckon/InstElet-10DoF.git
 cd InstElet-10DoF
 ```
 
