@@ -26,6 +26,10 @@
 
 #define SizeSensorsDataFIFO 30 // Tamanho da fila para os dados dos sensores
 
+// Endereco do servidor para envio dos dados
+#define SERVER_IP "http://192.168.18.165:8080"
+char url[128];
+
 // Estruturas para informação dos sensores
 typedef struct {
     float x;
@@ -64,9 +68,6 @@ typedef struct __attribute__((packed)) {
 
 // Fila para enviar dados entre tasks
 QueueHandle_t xQueueSensorsData;
-
-// Endereco do servidor para envio dos dados
-char url[128];
 
 
 // Task para aquisição de dados dos sensores via I2C
@@ -236,12 +237,12 @@ void send_json_to_server(SensorData_t *data) {
     cJSON_AddNumberToObject(bmp, "pressao", data->bmp180.pressure);
     cJSON_AddItemToObject(json, "bmp180", bmp);
     // // Orientação
-    // cJSON *orientation = cJSON_CreateObject();
-    // cJSON_AddNumberToObject(orientation, "pitch", data->orientation.pitch);
-    // cJSON_AddNumberToObject(orientation, "roll", data->orientation.roll);
-    // cJSON_AddNumberToObject(orientation, "yaw", data->orientation.yaw);
-    // cJSON_AddNumberToObject(orientation, "altitude", data->orientation.altitude);
-    // cJSON_AddItemToObject(json, "orientation", orientation);
+    cJSON *orientation = cJSON_CreateObject();
+    cJSON_AddNumberToObject(orientation, "pitch", data->orientation.pitch);
+    cJSON_AddNumberToObject(orientation, "roll", data->orientation.roll);
+    cJSON_AddNumberToObject(orientation, "yaw", data->orientation.yaw);
+    cJSON_AddNumberToObject(orientation, "altitude", data->orientation.altitude);
+    cJSON_AddItemToObject(json, "orientation", orientation);
 
     // Enviando os dados para o endpoint 
     char *json_str = cJSON_PrintUnformatted(json);
@@ -306,7 +307,7 @@ void app_main(void) {
     }
     // ESP_LOGI("MAIN", "Conectado ao Wi-Fi! IP: %s", wifi_manager_get_ip());
     // Montando a URL do servidor com o IP obtido
-    snprintf(url, sizeof(url), "http://%s:8080/sensores", wifi_manager_get_ip());
+    snprintf(url, sizeof(url), "%s/sensores", wifi_manager_get_ip());
 
     // Criando filas
     xQueueSensorsData = xQueueCreate(SizeSensorsDataFIFO, sizeof(SensorData_t));
