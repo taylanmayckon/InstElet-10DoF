@@ -18,7 +18,7 @@
 #define BMP180_CMD_READ_PRESS_OSS0  0x34    // Comando para iniciar medição de pressão (OSS=0, Standard)
 
 // Fator de Oversampling (OSS) - ajustável se necessário (0 a 3)
-#define BMP180_OSS                  0 // Simplificação para este exemplo
+#define BMP180_OSS 1 // Simplificação para este exemplo
 
 /**
  * @brief Estrutura para armazenar os coeficientes de calibração lidos do sensor.
@@ -52,7 +52,7 @@ typedef struct {
 
 /**
  * @brief Inicializa o driver do BMP180, configura o I2C e lê os dados de calibração.
- * * @param i2c_bus_handle Handle do barramento I2C já inicializado.
+ * @param i2c_bus_handle Handle do barramento I2C já inicializado.
  * @param out_dev Estrutura do driver BMP180 a ser inicializada.
  * @return ESP_OK em caso de sucesso.
  */
@@ -60,7 +60,7 @@ esp_err_t bmp180_init(i2c_master_bus_handle_t i2c_bus_handle, bmp180_dev_t *out_
 
 /**
  * @brief Lê a temperatura do sensor e retorna em 0.1 C (ex: 275 para 27.5 C).
- * * @param dev Estrutura do driver BMP180.
+ * @param dev Estrutura do driver BMP180.
  * @param temperature Ponteiro para armazenar a temperatura compensada.
  * @return ESP_OK em caso de sucesso.
  */
@@ -68,10 +68,18 @@ esp_err_t bmp180_read_temperature(bmp180_dev_t *dev, int32_t *temperature);
 
 /**
  * @brief Lê a pressão do sensor e retorna em Pa.
- * * @param dev Estrutura do driver BMP180.
+ * @param dev Estrutura do driver BMP180.
  * @param pressure Ponteiro para armazenar a pressão compensada.
  * @return ESP_OK em caso de sucesso.
  */
 esp_err_t bmp180_read_pressure(bmp180_dev_t *dev, int32_t *pressure);
+
+/**
+ * @brief Calcula a altitude baseada na pressão lida e na pressão ao nível do mar padrão (101325 Pa).
+ * @param pressure Pressão atual em Pa.
+ * @param altitude Ponteiro para armazenar a altitude calculada em metros.
+ * @return ESP_OK em caso de sucesso.
+ */
+esp_err_t bmp180_read_altitude(int32_t pressure, float *altitude);
 
 #endif // BMP180_H

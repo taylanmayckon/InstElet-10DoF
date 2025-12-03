@@ -165,9 +165,18 @@ void vTaskSensorsI2C(void *arg) {
             if (bmp180_read_pressure(&bmp180_dev, &raw_pressure) == ESP_OK) {
                 // Converte de Pa para kPa (1 kPa = 1000 Pa)
                 sensor_data.bmp180.pressure = (float)raw_pressure / 1000.0f;
+                
+                // Calcula a altitude baseada na pressão
+                float altitude_meters;
+                if (bmp180_read_altitude(raw_pressure, &altitude_meters) == ESP_OK) {
+                    sensor_data.orientation.altitude = altitude_meters;
+                } else {
+                    sensor_data.orientation.altitude = 0.0f;
+                }
             } else {
                 ESP_LOGW(pcTaskGetName(NULL), "Falha ao ler Pressão BMP180");
                 sensor_data.bmp180.pressure = 0.0f;
+                sensor_data.orientation.altitude = 0.0f;
             }
         }
 
