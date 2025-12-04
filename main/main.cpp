@@ -21,9 +21,9 @@ extern "C" {
 #include "esp_http_client.h"
 #include "cJSON.h"
 
-// Defines para Wi-Fi
-#define WIFI_SSID "FULL HOUSE JR TELECOM 2.4"
-#define WIFI_PASSWORD "Golfinho18"
+// Defines para Wi-Fi do laboratório
+#define WIFI_SSID "@Ioe"
+#define WIFI_PASSWORD ""
 
 // Defines para I2C e aquisição de dados
 #define I2C_MASTER_SDA_IO GPIO_NUM_21
@@ -39,7 +39,11 @@ extern "C" {
 #define SizeSensorsDataFIFO 100 // Tamanho da fila para os dados dos sensores
 
 // Endereco do servidor para envio dos dados
-#define SERVER_IP "http://192.168.1.10:4000"
+#define SERVER_IP "http://18.223.132.101:4000" // IP do servidor na AWS
+
+// // Endereco do servidor local dockerizado para envio dos dados
+// #define SERVER_IP "http://192.168.1.10:4000" // IP do docker local
+
 char url[128];
 
 // Estruturas para informação dos sensores
